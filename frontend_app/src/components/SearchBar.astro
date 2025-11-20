@@ -1,0 +1,130 @@
+---
+/**
+ * SearchBar.astro
+ * A client-side search input with debounced updates that syncs the query (?q=)
+ * to the current URL using history.replaceState, preserving other params.
+ * It dispatches a custom "recipe:search" event on the window when the debounced
+ * value changes so pages can react without a full reload if needed.
+ */
+const { placeholder = "Search recipes...", initial = "" } = Astro.props as {
+  placeholder?: string;
+  initial?: string;
+};
+---
+<form id="search-form" role="search" class="searchbar" onsubmit="return false" aria-label="Recipe search">
+  <div class="searchbar__inner">
+    <svg class="searchbar__icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M10 4a6 6 0 1 1 3.996 10.39l4.307 4.308-1.414 1.414-4.3-4.3A6 6 0 0 1 10 4m0 2a4 4 0 1 0 .001 8A4 4 0 0 0 10 6"/>
+    </svg>
+    <input
+      id="search-input"
+      name="q"
+      type="search"
+      class="input searchbar__input"
+      placeholder={placeholder}
+      value={initial}
+      autocomplete="off"
+      enterkeyhint="search"
+      aria-label="Search recipes"
+    />
+  </div>
+</form>
+
+<style>
+  .searchbar {
+    min-width: 220px;
+    width: min(460px, 56vw);
+  }
+  .searchbar__inner {
+    position: relative;
+  }
+  .searchbar__icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+  .searchbar__input {
+    padding-left: 2rem;
+    background: var(--color-surface);
+  }
+</style>
+
+<script>
+  // Debounced URL sync + custom event dispatch
+  (function () {
+    const DEBOUNCE_MS = 300;
+    const form = document.getElementById('search-form');
+    const input = document.getElementById('search-input');
+    if (!form || !input) return;
+
+    // Initialize from current URL if no explicit initial provided
+    try {
+      const usp = new URLSearchParams(window.location.search);
+      const currentQ = usp.get('q') || '';
+      if (!input.value && currentQ) {
+        input.value = currentQ;
+      }
+    } catch { /* noop */ }
+
+    let timer = null;
+
+    function updateUrl(qValue) {
+      try {
+        const url = new URL(window.location.href);
+        const usp = url.searchParams;
+
+        // Preserve all existing params, only change q
+        if (qValue && qValue.trim()) {
+          usp.set('q', qValue.trim());
+        } else {
+          usp.delete('q');
+        }
+
+        // Update the URL without full reload
+        url.search = usp.toString();
+        window.history.replaceState({}, '', url);
+
+        // Notify listeners that a search occurred
+        window.dispatchEvent(new CustomEvent('recipe:search', {
+          detail: { q: qValue.trim() }
+        }));
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[SearchBar] Failed to update URL', e);
+      }
+    }
+
+    function handleImmediateSubmit(ev) {
+      ev?.preventDefault?.();
+      const val = input.value || '';
+      updateUrl(val);
+    }
+
+    function handleInput() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      const val = input.value || '';
+      timer = setTimeout(() => updateUrl(val), DEBOUNCE_MS);
+    }
+
+    // Typing -> debounced URL update
+    input.addEventListener('input', handleInput);
+
+    // Pressing Enter -> immediate URL update (no navigation)
+    form.addEventListener('submit', handleImmediateSubmit);
+
+    // Escape clears the input and updates URL
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        input.value = '';
+        handleImmediateSubmit(e);
+        input.blur();
+      }
+    });
+  })();
+</script>

@@ -1,8 +1,12 @@
 ---
 import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import NavBar from '../components/NavBar.astro';
 ---
 
 <Layout>
+  <Fragment slot="navbar">
+    <NavBar />
+  </Fragment>
   <Welcome />
 </Layout>

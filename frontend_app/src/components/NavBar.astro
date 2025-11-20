@@ -1,0 +1,56 @@
+---
+import SearchBar from "./SearchBar.astro";
+const params = new URLSearchParams(Astro.url.search);
+const initialQ = params.get('q') || '';
+---
+<div class="nav">
+  <ul class="nav__links">
+    <li><a href="/" aria-current={Astro.url.pathname === '/' ? 'page' : undefined}>Home</a></li>
+    <li><a href="/#popular">Popular</a></li>
+    <li><a href="/#quick">Quick</a></li>
+    <li><a href="/#desserts">Desserts</a></li>
+  </ul>
+  <div class="nav__search">
+    <SearchBar initial={initialQ} placeholder="Search recipes..." />
+  </div>
+</div>
+
+<style>
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+  .nav__links {
+    list-style: none;
+    display: none;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+  }
+  .nav__links a {
+    color: var(--color-text);
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-sm);
+  }
+  .nav__links a[aria-current="page"] {
+    background: rgba(37,99,235,0.12);
+    color: var(--color-primary);
+  }
+  .nav__links a:hover {
+    background: rgba(0,0,0,0.05);
+  }
+  body.dark-theme .nav__links a:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .nav__search {
+    width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    .nav__links { display: inline-flex; }
+    .nav__search { width: auto; min-width: 320px; }
+    .nav { gap: var(--space-6); }
+  }
+</style>
