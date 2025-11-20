@@ -1,0 +1,206 @@
+---
+import type { Recipe } from "../lib/types";
+
+/**
+ * RecipeCard.astro
+ * Accessible card UI for a single recipe with image, title, meta, and footer actions.
+ * Ocean-themed styling, hover elevation, and rounded corners.
+ *
+ * Props:
+ *  - recipe: Recipe (required)
+ */
+
+// PUBLIC_INTERFACE
+export interface Props {
+  /** The recipe to render as a card */
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props as Props;
+const {
+  id,
+  title,
+  description,
+  imageUrl,
+  totalTimeMinutes,
+  servings,
+  rating,
+  ratingsCount,
+  cuisine,
+  difficulty,
+} = recipe;
+
+// Derived display helpers
+const timeLabel = typeof totalTimeMinutes === "number" ? `${totalTimeMinutes} min` : undefined;
+const servingsLabel =
+  typeof servings === "number" || typeof servings === "string" ? `${servings} serving${String(servings) === "1" ? "" : "s"}` : undefined;
+
+const ratingLabel = typeof rating === "number" ? `${rating.toFixed(1)}★` : undefined;
+const ratingsCountLabel = typeof ratingsCount === "number" ? `(${ratingsCount})` : undefined;
+const badgeItems: Array<{ label: string; title: string }> = [];
+if (cuisine) badgeItems.push({ label: cuisine, title: `Cuisine: ${cuisine}` });
+if (difficulty) badgeItems.push({ label: String(difficulty), title: `Difficulty: ${difficulty}` });
+
+// Ensure link target
+const href = `/recipes/${encodeURIComponent(String(id))}`;
+---
+<article class="recipe-card surface" itemscope itemtype="https://schema.org/Recipe" aria-labelledby={`recipe-title-${id}`}>
+  <a class="recipe-card__media" href={href} aria-label={`View recipe ${title}`}>
+    {imageUrl ? (
+      <img
+        src={imageUrl}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        itemprop="image"
+        width="600"
+        height="400"
+      />
+    ) : (
+      <div class="recipe-card__placeholder" aria-hidden="true">
+        <svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5C3.89 3 3 3.9 3 5v14a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2M8.5 11.5L11 14.5l3.5-4.5L19 18H5l3.5-6.5Z"/>
+        </svg>
+      </div>
+    )}
+  </a>
+
+  <div class="recipe-card__body">
+    <h3 id={`recipe-title-${id}`} class="recipe-card__title text-title-md" itemprop="name">
+      <a href={href}>{title}</a>
+    </h3>
+
+    {description && (
+      <p class="recipe-card__desc" itemprop="description">
+        {description}
+      </p>
+    )}
+
+    <div class="recipe-card__meta" aria-label="Recipe information">
+      {timeLabel && (
+        <span class="meta-item" title="Total time">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m.5 5h-1v6l5.25 3.15l.5-.84l-4.75-2.81z"/></svg>
+          <span>{timeLabel}</span>
+        </span>
+      )}
+      {servingsLabel && (
+        <span class="meta-item" title="Servings">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9s9-4.03 9-9s-4.03-9-9-9m1 14h-2v-2h2zm0-4h-2V7h2z"/></svg>
+          <span>{servingsLabel}</span>
+        </span>
+      )}
+      {(ratingLabel || ratingsCountLabel) && (
+        <span class="meta-item" title="Rating">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m12 17.27l6.18 3.73l-1.64-7.03L21 9.24l-7.19-.61L12 2L10.19 8.63L3 9.24l4.46 4.73L5.82 21z"/></svg>
+          <span>{ratingLabel} {ratingsCountLabel}</span>
+        </span>
+      )}
+    </div>
+
+    {badgeItems.length > 0 && (
+      <div class="recipe-card__badges">
+        {badgeItems.map((b) => (
+          <span class="badge" title={b.title}>{b.label}</span>
+        ))}
+      </div>
+    )}
+  </div>
+
+  <footer class="recipe-card__footer">
+    <a class="btn btn-primary recipe-card__cta" href={href} aria-label={`Open ${title}`}>View</a>
+  </footer>
+</article>
+
+<style>
+  .recipe-card {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    padding: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    transition: box-shadow var(--transition), transform var(--transition);
+    background: var(--color-surface);
+  }
+  .recipe-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+  }
+
+  .recipe-card__media {
+    display: block;
+    aspect-ratio: 3 / 2;
+    background: linear-gradient(180deg, rgba(59,130,246,0.15) 0%, rgba(37,99,235,0.05) 100%);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .recipe-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .recipe-card__placeholder {
+    width: 100%;
+    height: 100%;
+    color: var(--color-primary);
+    display: grid;
+    place-items: center;
+  }
+
+  .recipe-card__body {
+    padding: var(--space-5);
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .recipe-card__title {
+    margin: 0;
+    line-height: 1.25;
+  }
+  .recipe-card__title a {
+    color: var(--color-text);
+    text-decoration: none;
+  }
+  .recipe-card__title a:hover {
+    color: var(--color-primary);
+  }
+
+  .recipe-card__desc {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .recipe-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+  .meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .recipe-card__badges {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .recipe-card__footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  .recipe-card__cta {
+    padding-inline: 1rem;
+  }
+</style>

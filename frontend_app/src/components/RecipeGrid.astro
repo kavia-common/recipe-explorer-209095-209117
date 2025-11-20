@@ -1,0 +1,77 @@
+---
+import type { Recipe } from "../lib/types";
+import RecipeCard from "./RecipeCard.astro";
+
+/**
+ * RecipeGrid.astro
+ * Responsive, accessible grid for rendering a collection of recipes using RecipeCard.
+ *
+ * Props:
+ *  - recipes: Recipe[] (required)
+ *  - emptyMessage?: string (optional) message to show when no recipes
+ */
+
+// PUBLIC_INTERFACE
+export interface Props {
+  /** Collection of recipes to display */
+  recipes: Recipe[];
+  /** Optional message when list is empty */
+  emptyMessage?: string;
+}
+
+const { recipes = [], emptyMessage = "No recipes found." } = Astro.props as Props;
+---
+<section class="recipe-grid" aria-label="Recipes">
+  {recipes.length === 0 ? (
+    <div role="status" class="recipe-grid__empty surface">
+      <div class="recipe-grid__empty__icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a9 9 0 0 0-9 9v6a3 3 0 0 0 3 3h2v2h2v-2h4v2h2v-2h2a3 3 0 0 0 3-3v-6a9 9 0 0 0-9-9m0 2a7 7 0 0 1 7 7v1H5v-1a7 7 0 0 1 7-7M5 14h14v3a1 1 0 0 1-1 1h-2v-2h-2v2H10v-2H8v2H6a1 1 0 0 1-1-1z"/></svg>
+      </div>
+      <p class="text-muted">{emptyMessage}</p>
+    </div>
+  ) : (
+    <ul class="grid grid-cols-2-sm grid-cols-3-lg recipe-grid__list" role="list">
+      {recipes.map((r) => (
+        <li class="recipe-grid__item">
+          <RecipeCard recipe={r} />
+        </li>
+      ))}
+    </ul>
+  )}
+</section>
+
+<style>
+  .recipe-grid {
+    display: block;
+  }
+
+  .recipe-grid__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .recipe-grid__item {
+    min-width: 0;
+  }
+
+  /* Empty state */
+  .recipe-grid__empty {
+    padding: var(--space-8);
+    text-align: center;
+    display: grid;
+    place-items: center;
+    gap: var(--space-3);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+  }
+  .recipe-grid__empty__icon {
+    color: var(--color-primary);
+    display: inline-grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-full);
+    background: rgba(37,99,235,0.10);
+  }
+</style>
