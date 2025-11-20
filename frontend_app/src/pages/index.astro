@@ -2,11 +2,35 @@
 import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
 import NavBar from '../components/NavBar.astro';
+import Filters from '../components/Filters.astro';
 ---
 
 <Layout>
   <Fragment slot="navbar">
     <NavBar />
   </Fragment>
-  <Welcome />
+
+  <!-- Responsive layout: sidebar-like filters on md+, stacked on mobile -->
+  <section class="layout">
+    <aside class="layout__filters">
+      <Filters collapsedOnMobile={true} />
+    </aside>
+    <div class="layout__content">
+      <Welcome />
+    </div>
+  </section>
+
+  <style>
+    .layout {
+      display: grid;
+      gap: var(--space-6);
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 768px) {
+      .layout {
+        grid-template-columns: 280px 1fr;
+        align-items: start;
+      }
+    }
+  </style>
 </Layout>

@@ -1,0 +1,315 @@
+---
+/**
+ * Filters.astro
+ * A sidebar/mobile-friendly filter panel supporting cuisine, diet, difficulty, max time, and rating.
+ * - Syncs values to URLSearchParams while preserving existing params.
+ * - Emits a "recipe:filters" window event after updates.
+ * - Conditionally shows advanced filters (e.g., rating) based on PUBLIC_FEATURE_FLAGS.
+ * - Accessible labels and keyboard-friendly.
+ *
+ * Props:
+ *  - collapsedOnMobile?: boolean (default true): renders as a collapsible drawer on small screens
+ */
+const { collapsedOnMobile = true } = Astro.props as {
+  collapsedOnMobile?: boolean;
+};
+
+// Access public environment variables for feature flags
+const ENV = import.meta.env || {};
+// PUBLIC_FEATURE_FLAGS can be a JSON string or comma-separated list (e.g., "rating,experiments")
+const RAW_FLAGS = String(ENV.PUBLIC_FEATURE_FLAGS ?? "").trim();
+
+function parseFlags(raw: string): Record<string, boolean> {
+  if (!raw) return {};
+  // Try JSON first
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      // normalize truthy values to boolean
+      return Object.fromEntries(
+        Object.entries(parsed).map(([k, v]) => [k, !!v])
+      );
+    }
+  } catch {
+    // Fall back to CSV "flag1,flag2"
+    const set = new Set<string>(
+      raw.split(",").map((s) => s.trim()).filter(Boolean)
+    );
+    return Object.fromEntries([...set].map((k) => [k, true]));
+  }
+  return {};
+}
+
+const FLAGS = parseFlags(RAW_FLAGS);
+
+// Feature flags
+const ENABLE_RATING = !!(FLAGS.rating || FLAGS.enableRating || FLAGS.advancedFilters);
+
+// Read current URL params for initial state (server-side render)
+const params = new URLSearchParams(Astro.url.search);
+const initialCuisine = params.get("cuisine") ?? "";
+const initialDiet = params.get("diet") ?? "";
+const initialDifficulty = params.get("difficulty") ?? "";
+const initialMaxTime = params.get("maxTime") ?? "";
+const initialMinRating = params.get("minRating") ?? "";
+
+// Options (basic sets; could be extended or fetched dynamically)
+const cuisines = ["", "Italian", "French", "Indian", "Chinese", "Mexican", "Fusion"];
+const diets = ["", "vegetarian", "vegan", "keto", "paleo", "gluten-free"];
+const difficulties = ["", "easy", "medium", "hard"];
+const ratings = ["", "2", "3", "4", "4.5"]; // minimum rating options
+---
+
+<aside class:list={[
+  "filters",
+  collapsedOnMobile ? "filters--collapsible" : "",
+]} aria-label="Recipe filters">
+  <div class="filters__header">
+    <h2 class="text-title-md" id="filters-title">Filters</h2>
+    {collapsedOnMobile && (
+      <button
+        id="filters-toggle"
+        class="btn btn-secondary filters__toggle"
+        aria-expanded="false"
+        aria-controls="filters-panel"
+        type="button"
+      >
+        Show
+      </button>
+    )}
+  </div>
+
+  <div id="filters-panel" class="filters__panel surface" role="region" aria-labelledby="filters-title">
+    <form id="filters-form" class="filters__form" onsubmit="return false">
+      <div class="field">
+        <label for="f-cuisine" class="field__label">Cuisine</label>
+        <select id="f-cuisine" name="cuisine" class="select">
+          {cuisines.map((c) => (
+            <option value={c} selected={c === initialCuisine}>{c || "Any"}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-diet" class="field__label">Diet</label>
+        <select id="f-diet" name="diet" class="select">
+          {diets.map((d) => (
+            <option value={d} selected={d === initialDiet}>{d || "Any"}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-difficulty" class="field__label">Difficulty</label>
+        <select id="f-difficulty" name="difficulty" class="select">
+          {difficulties.map((d) => (
+            <option value={d} selected={d === initialDifficulty}>{d || "Any"}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-maxtime" class="field__label">Max time (minutes)</label>
+        <input
+          id="f-maxtime"
+          name="maxTime"
+          class="input"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          placeholder="e.g., 30"
+          value={initialMaxTime}
+          aria-describedby="f-maxtime-help"
+        />
+        <div id="f-maxtime-help" class="help">Only recipes with total time less than or equal to this.</div>
+      </div>
+
+      {ENABLE_RATING && (
+        <div class="field">
+          <label for="f-minrating" class="field__label">Minimum rating</label>
+          <select id="f-minrating" name="minRating" class="select">
+            {ratings.map((r) => (
+              <option value={r} selected={r === initialMinRating}>
+                {r ? `${r}+` : "Any"}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div class="filters__actions">
+        <button id="filters-apply" type="button" class="btn btn-primary">Apply</button>
+        <button id="filters-clear" type="button" class="btn btn-secondary">Clear</button>
+      </div>
+    </form>
+  </div>
+</aside>
+
+<style>
+  .filters {
+    display: block;
+  }
+  .filters__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+  }
+  .filters__toggle {
+    padding: 0.45rem 0.7rem;
+  }
+  .filters__panel {
+    padding: var(--space-4);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .filters--collapsible .filters__panel {
+    display: none;
+  }
+  .filters--collapsible .filters__panel[aria-hidden="false"] {
+    display: block;
+  }
+
+  .filters__form {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .field {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .field__label {
+    font-weight: 600;
+  }
+  .help {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+  }
+  .filters__actions {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: flex-end;
+    margin-top: var(--space-2);
+  }
+
+  /* Responsive: sidebar vs. drawer on mobile */
+  @media (min-width: 768px) {
+    .filters--collapsible .filters__panel {
+      display: block !important;
+    }
+    .filters__toggle {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  (function () {
+    const form = document.getElementById('filters-form');
+    const applyBtn = document.getElementById('filters-apply');
+    const clearBtn = document.getElementById('filters-clear');
+    const maxTime = document.getElementById('f-maxtime');
+
+    // Collapsible handling for mobile
+    const toggleBtn = document.getElementById('filters-toggle');
+    const panel = document.getElementById('filters-panel');
+    if (toggleBtn && panel) {
+      function setExpanded(expanded) {
+        toggleBtn.setAttribute('aria-expanded', String(expanded));
+        panel.setAttribute('aria-hidden', String(!expanded));
+        toggleBtn.textContent = expanded ? 'Hide' : 'Show';
+      }
+      // initial collapsed
+      setExpanded(false);
+      toggleBtn.addEventListener('click', () => {
+        const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+        setExpanded(!isExpanded);
+      });
+    }
+
+    // Helper: get current URL with preserved params and updated filter params
+    function updateUrlFromForm() {
+      const url = new URL(window.location.href);
+      const usp = url.searchParams;
+
+      // Collect values
+      const cuisine = (form.querySelector('#f-cuisine')?.value ?? '').trim();
+      const diet = (form.querySelector('#f-diet')?.value ?? '').trim();
+      const difficulty = (form.querySelector('#f-difficulty')?.value ?? '').trim();
+      const maxTimeVal = (form.querySelector('#f-maxtime')?.value ?? '').replace(/[^0-9]/g, '');
+      const minRatingEl = form.querySelector('#f-minrating');
+      const minRating = minRatingEl ? (minRatingEl.value ?? '').trim() : '';
+
+      // Write values (preserve others)
+      if (cuisine) usp.set('cuisine', cuisine); else usp.delete('cuisine');
+      if (diet) usp.set('diet', diet); else usp.delete('diet');
+      if (difficulty) usp.set('difficulty', difficulty); else usp.delete('difficulty');
+      if (maxTimeVal) usp.set('maxTime', maxTimeVal); else usp.delete('maxTime');
+      if (minRating) usp.set('minRating', minRating); else usp.delete('minRating');
+
+      // When filters change, reset pagination param "page" to 1 if present
+      if (usp.has('page')) usp.set('page', '1');
+
+      url.search = usp.toString();
+      // Update URL without navigation
+      window.history.replaceState({}, '', url);
+
+      // Emit change event for listeners (e.g., list component) to refetch
+      window.dispatchEvent(new CustomEvent('recipe:filters', {
+        detail: {
+          cuisine,
+          diet,
+          difficulty,
+          maxTime: maxTimeVal ? Number(maxTimeVal) : undefined,
+          minRating: minRating ? Number(minRating) : undefined,
+        }
+      }));
+    }
+
+    // Apply on button click
+    applyBtn?.addEventListener('click', () => {
+      updateUrlFromForm();
+    });
+
+    // Clear button
+    clearBtn?.addEventListener('click', () => {
+      const url = new URL(window.location.href);
+      const usp = url.searchParams;
+      ['cuisine', 'diet', 'difficulty', 'maxTime', 'minRating'].forEach((k) => usp.delete(k));
+      // reset page to 1 if exists
+      if (usp.has('page')) usp.set('page', '1');
+      url.search = usp.toString();
+      window.history.replaceState({}, '', url);
+
+      // Reset form controls
+      const ids = ['f-cuisine', 'f-diet', 'f-difficulty', 'f-maxtime', 'f-minrating'];
+      ids.forEach((id) => {
+        const el = form.querySelector('#' + id);
+        if (!el) return;
+        if (el.tagName === 'SELECT') el.value = '';
+        else if (el.tagName === 'INPUT') el.value = '';
+      });
+
+      window.dispatchEvent(new CustomEvent('recipe:filters', { detail: {} }));
+    });
+
+    // Basic input constraint: digits only for max time
+    if (maxTime) {
+      maxTime.addEventListener('input', () => {
+        const v = maxTime.value || '';
+        const digits = v.replace(/[^0-9]/g, '');
+        if (digits !== v) maxTime.value = digits;
+      });
+    }
+
+    // Also react immediately on change for selects on desktop (optional enhancement)
+    form?.addEventListener('change', (e) => {
+      // only auto-apply for select changes; leave text input to Apply button
+      const t = e.target;
+      if (t && (t.tagName === 'SELECT')) {
+        updateUrlFromForm();
+      }
+    });
+  })();
+</script>
