@@ -1,8 +1,100 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
 import NavBar from '../components/NavBar.astro';
 import Filters from '../components/Filters.astro';
+import RecipeGrid from '../components/RecipeGrid.astro';
+import { getRecipes } from '../lib/api';
+import type { RecipeQueryParams } from '../lib/types';
+
+// Parse URLSearchParams to build query params for getRecipes
+const usp = new URLSearchParams(Astro.url.search);
+
+// Map incoming params to RecipeQueryParams with normalization
+function parseNumber(v: string | null): number | undefined {
+  if (!v) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function parseParams(usp: URLSearchParams): RecipeQueryParams {
+  const q = usp.get('q') ?? undefined;
+  const cuisine = usp.get('cuisine') ?? undefined;
+  const diet = usp.get('diet') ?? undefined; // Not in types directly, but kept in URL; can map to tag
+  const difficulty = usp.get('difficulty') ?? undefined;
+  // Support both timeMax -> page param mapping; our API supports sort/time by 'time'
+  const timeMax = usp.get('timeMax') ?? usp.get('maxTime') ?? undefined;
+  const maxTime = timeMax ? Number(timeMax) : undefined; // kept in URL for client; not directly used in API mock
+
+  const rating = usp.get('rating') ?? usp.get('minRating') ?? undefined;
+  const minRating = rating ? Number(rating) : undefined;
+
+  const page = parseNumber(usp.get('page')) ?? 1;
+  const pageSize = parseNumber(usp.get('pageSize')) ?? 12;
+
+  // Sorting: expect sort param like "rating:desc" or "title:asc"
+  const sortParam = usp.get('sort') ?? undefined;
+  let sortBy: RecipeQueryParams['sortBy'] = undefined;
+  let sortDir: RecipeQueryParams['sortDir'] = undefined;
+  if (sortParam) {
+    const [by, dir] = sortParam.split(':');
+    if (by) {
+      if (by === 'timeMax' || by === 'time') sortBy = 'time';
+      else if (by === 'date') sortBy = 'date';
+      else if (by === 'rating') sortBy = 'rating';
+      else sortBy = 'title';
+    }
+    if (dir === 'desc' || dir === 'asc') sortDir = dir;
+  }
+
+  const params: RecipeQueryParams = {
+    q,
+    cuisine,
+    difficulty,
+    page,
+    pageSize,
+    sortBy,
+    sortDir,
+    minRating,
+  };
+
+  // Map diet to tag for mock filtering (if provided)
+  if (diet) params.tag = diet;
+
+  // Note: maxTime currently not part of RecipeQueryParams; if backend supports it as 'timeMax',
+  // it could be added. For now, we keep it as URL param for future API support.
+
+  return params;
+}
+
+const params = parseParams(usp);
+const result = await getRecipes(params);
+const error = result.ok ? undefined : result.error;
+const data = result.ok ? result.data : undefined;
+
+// Prepare props for rendering
+const recipes = data?.items ?? [];
+const total = data?.total ?? recipes.length;
+const page = data?.page ?? params.page ?? 1;
+const pageSize = data?.pageSize ?? params.pageSize ?? 12;
+const hasMore = data?.hasMore ?? (page * pageSize < total);
+
+// Helpers for pagination links (server-side navigation as fallback)
+function makeUrl(nextPage: number): string {
+  const url = new URL(Astro.url);
+  if (nextPage <= 1) {
+    url.searchParams.delete('page');
+  } else {
+    url.searchParams.set('page', String(nextPage));
+  }
+  return url.pathname + (url.search ? `?${url.searchParams.toString()}` : '');
+}
+
+// Compute current sort selection for UI
+function currentSort(): string {
+  const sb = params.sortBy ?? 'title';
+  const sd = params.sortDir ?? 'asc';
+  return `${sb}:${sd}`;
+}
 ---
 
 <Layout>
@@ -10,13 +102,70 @@ import Filters from '../components/Filters.astro';
     <NavBar />
   </Fragment>
 
-  <!-- Responsive layout: sidebar-like filters on md+, stacked on mobile -->
   <section class="layout">
     <aside class="layout__filters">
       <Filters collapsedOnMobile={true} />
     </aside>
+
     <div class="layout__content">
-      <Welcome />
+      <section class="toolbar">
+        <div class="toolbar__left">
+          <h1 class="text-title-lg">Explore Recipes</h1>
+          <p class="text-muted">
+            {total} result{total === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div class="toolbar__right">
+          <label for="sort" class="sr-only">Sort by</label>
+          <select id="sort" class="select toolbar__sort" aria-label="Sort results">
+            <option value="title:asc" selected={currentSort() === 'title:asc'}>Title A→Z</option>
+            <option value="title:desc" selected={currentSort() === 'title:desc'}>Title Z→A</option>
+            <option value="rating:desc" selected={currentSort() === 'rating:desc'}>Rating High→Low</option>
+            <option value="rating:asc" selected={currentSort() === 'rating:asc'}>Rating Low→High</option>
+            <option value="time:asc" selected={currentSort() === 'time:asc'}>Time Short→Long</option>
+            <option value="time:desc" selected={currentSort() === 'time:desc'}>Time Long→Short</option>
+            <option value="date:desc" selected={currentSort() === 'date:desc'}>Newest</option>
+            <option value="date:asc" selected={currentSort() === 'date:asc'}>Oldest</option>
+          </select>
+
+          <label for="page-size" class="sr-only">Page size</label>
+          <select id="page-size" class="select toolbar__pagesize" aria-label="Items per page">
+            <option value="6" selected={pageSize === 6}>6</option>
+            <option value="12" selected={pageSize === 12}>12</option>
+            <option value="24" selected={pageSize === 24}>24</option>
+          </select>
+        </div>
+      </section>
+
+      {error && (
+        <div role="alert" class="banner banner--error">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      <div id="results">
+        <RecipeGrid recipes={recipes} emptyMessage="No recipes match your search. Try adjusting filters." />
+      </div>
+
+      <nav class="pagination" aria-label="Pagination">
+        <a
+          class:list={['btn','btn-secondary','pagination__btn', page <= 1 ? 'is-disabled' : '']}
+          href={makeUrl(Math.max(1, page - 1))}
+          aria-disabled={page <= 1 ? 'true' : 'false'}
+          id="prev-page"
+        >
+          ← Prev
+        </a>
+        <span class="pagination__info">Page {page} {total ? `of ${Math.max(1, Math.ceil(total / pageSize))}` : ''}</span>
+        <a
+          class:list={['btn','btn-secondary','pagination__btn', !hasMore ? 'is-disabled' : '']}
+          href={makeUrl(page + 1)}
+          aria-disabled={!hasMore ? 'true' : 'false'}
+          id="next-page"
+        >
+          Next →
+        </a>
+      </nav>
     </div>
   </section>
 
@@ -32,5 +181,184 @@ import Filters from '../components/Filters.astro';
         align-items: start;
       }
     }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-4);
+      gap: var(--space-4);
+    }
+    .toolbar__left {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .toolbar__right {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+    }
+    .toolbar__sort, .toolbar__pagesize {
+      min-width: 140px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0);
+      border: 0;
+    }
+
+    .banner {
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+      margin-bottom: var(--space-4);
+    }
+    .banner--error {
+      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.10);
+      color: #7F1D1D;
+    }
+    body.dark-theme .banner--error {
+      color: #fecaca;
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-4);
+      margin-top: var(--space-6);
+    }
+    .pagination__btn.is-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .pagination__info {
+      color: var(--color-text-muted);
+      font-size: 0.95rem;
+    }
   </style>
+
+  <script>
+    // Client-script: listen for search/filter changes, update URL, re-fetch partial HTML for results and pagination.
+    (function () {
+      const resultsEl = document.getElementById('results');
+      const sortEl = document.getElementById('sort');
+      const pageSizeEl = document.getElementById('page-size');
+      const prevBtn = document.getElementById('prev-page');
+      const nextBtn = document.getElementById('next-page');
+
+      // Helper to update one param in URLSearchParams and reset page
+      function setParam(key, value) {
+        const url = new URL(window.location.href);
+        const usp = url.searchParams;
+        if (value === undefined || value === null || String(value).trim() === '') {
+          usp.delete(key);
+        } else {
+          usp.set(key, String(value).trim());
+        }
+        // reset pagination on param changes (except when clicking explicit page buttons)
+        if (key !== 'page') usp.set('page', '1');
+        url.search = usp.toString();
+        window.history.replaceState({}, '', url);
+      }
+
+      // Lightweight refresh: fetch this page with current URL and swap the results and pagination sections
+      async function refresh() {
+        try {
+          const res = await fetch(window.location.href, { headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' });
+          const html = await res.text();
+
+          // Create a detached DOM to query the new sections
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const newResults = doc.getElementById('results');
+          const newPrev = doc.getElementById('prev-page');
+          const newNext = doc.getElementById('next-page');
+          const newInfo = doc.querySelector('.pagination__info');
+
+          if (newResults && resultsEl) {
+            resultsEl.replaceWith(newResults);
+          }
+          // Update pagination controls
+          if (prevBtn && newPrev) prevBtn.replaceWith(newPrev);
+          if (nextBtn && newNext) nextBtn.replaceWith(newNext);
+          const pagination = document.querySelector('.pagination');
+          if (pagination && newInfo) {
+            const oldInfo = pagination.querySelector('.pagination__info');
+            if (oldInfo) oldInfo.replaceWith(newInfo);
+          }
+
+          // Re-bind references after swaps
+          bindControls();
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[index] Failed to refresh results', e);
+        }
+      }
+
+      function onSortChange() {
+        const val = sortEl?.value || '';
+        if (!val) {
+          setParam('sort', null);
+        } else {
+          setParam('sort', val);
+        }
+        refresh();
+      }
+      function onPageSizeChange() {
+        const val = pageSizeEl?.value || '';
+        const pageSize = Number(val);
+        if (!Number.isFinite(pageSize)) return;
+        setParam('pageSize', pageSize);
+        refresh();
+      }
+
+      function onPrevClick(ev) {
+        const target = ev.currentTarget;
+        if (!(target instanceof HTMLAnchorElement)) return;
+        ev.preventDefault();
+        const url = new URL(window.location.href);
+        const current = Number(url.searchParams.get('page') || '1');
+        const next = Math.max(1, current - 1);
+        setParam('page', next);
+        refresh();
+      }
+      function onNextClick(ev) {
+        const target = ev.currentTarget;
+        if (!(target instanceof HTMLAnchorElement)) return;
+        ev.preventDefault();
+        const url = new URL(window.location.href);
+        const current = Number(url.searchParams.get('page') || '1');
+        const next = current + 1;
+        setParam('page', next);
+        refresh();
+      }
+
+      function bindControls() {
+        // Re-select possibly replaced elements
+        const newSort = document.getElementById('sort');
+        const newPageSize = document.getElementById('page-size');
+        const newPrev = document.getElementById('prev-page');
+        const newNext = document.getElementById('next-page');
+
+        if (newSort) newSort.addEventListener('change', onSortChange, { once: false });
+        if (newPageSize) newPageSize.addEventListener('change', onPageSizeChange, { once: false });
+        if (newPrev) newPrev.addEventListener('click', onPrevClick, { once: false });
+        if (newNext) newNext.addEventListener('click', onNextClick, { once: false });
+      }
+
+      // Listen to custom events from SearchBar and Filters
+      window.addEventListener('recipe:search', () => {
+        // Reset to page 1 handled in SearchBar; just refresh
+        refresh();
+      });
+      window.addEventListener('recipe:filters', () => {
+        refresh();
+      });
+
+      bindControls();
+    })();
+  </script>
 </Layout>
