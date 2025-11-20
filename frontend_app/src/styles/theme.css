@@ -1,0 +1,256 @@
+:root {
+  /* Ocean Professional - Light theme */
+  --color-primary: #2563EB;
+  --color-primary-600: #2563EB;
+  --color-primary-500: #3B82F6;
+  --color-secondary: #F59E0B; /* also used as success accent */
+  --color-success: #F59E0B;
+  --color-error: #EF4444;
+
+  --color-bg: #f9fafb;       /* background */
+  --color-surface: #ffffff;  /* surfaces/cards */
+  --color-text: #111827;     /* base text */
+  --color-text-muted: #4B5563;
+
+  --color-border: rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 10px rgba(0,0,0,0.08);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  --transition-fast: 150ms ease;
+  --transition: 250ms ease;
+
+  /* Subtle gradient for backgrounds or callouts (from-blue-500/10 to-gray-50) */
+  --gradient-subtle: linear-gradient(180deg, rgba(59,130,246,0.10) 0%, #f9fafb 100%);
+
+  /* Container */
+  --container-max: 1200px;
+  --container-pad: 1rem;
+}
+
+/* Dark theme overrides (extending current implementation) */
+body.dark-theme {
+  --color-bg: #0f172a;           /* slate-950-ish */
+  --color-surface: #111827;      /* gray-900 */
+  --color-text: #f9fafb;         /* gray-50 */
+  --color-text-muted: #CBD5E1;   /* slate-300 */
+  --color-border: rgba(255,255,255,0.12);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
+  --shadow-md: 0 4px 10px rgba(0,0,0,0.55);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.6);
+
+  /* Dark subtle gradient */
+  --gradient-subtle: linear-gradient(180deg, rgba(37,99,235,0.12) 0%, rgba(17,24,39,1) 100%);
+}
+
+/* Global resets and base */
+html, body {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  line-height: 1.6;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-text);
+  margin: 0 0 var(--space-3);
+  line-height: 1.25;
+}
+
+p {
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-4);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+a:hover {
+  color: var(--color-primary-500);
+}
+
+/* Layout utilities */
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+}
+
+.page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--color-bg);
+}
+
+.main {
+  padding-block: var(--space-6);
+}
+
+/* Surface and elevaton helpers */
+.surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5);
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.625rem 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(37,99,235,0.25);
+}
+.btn-primary:hover {
+  background: var(--color-primary-500);
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+body.dark-theme .btn-secondary {
+  background: var(--color-surface);
+}
+
+/* Badges & pills */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.badge--success {
+  color: #92400E;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.badge--error {
+  color: #7F1D1D;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Forms */
+.input, .select {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.input:focus, .select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.20);
+}
+
+/* Gradient helpers */
+.bg-gradient-subtle {
+  background: var(--gradient-subtle);
+}
+
+/* Responsive helpers */
+.hidden-sm {
+  display: none;
+}
+@media (min-width: 640px) {
+  .hidden-sm {
+    display: initial;
+  }
+}
+
+/* Typography utility classes */
+.text-title-xl { font-size: clamp(1.5rem, 2vw + 1rem, 2.25rem); font-weight: 700; }
+.text-title-lg { font-size: 1.5rem; font-weight: 700; }
+.text-title-md { font-size: 1.25rem; font-weight: 600; }
+.text-body    { font-size: 1rem; }
+.text-muted   { color: var(--color-text-muted); }
+
+/* Nav placeholder styles */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+.navbar-inner {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Basic list utilities for recipe listing */
+.grid {
+  display: grid;
+  gap: var(--space-6);
+}
+@media (min-width: 640px) {
+  .grid-cols-2-sm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .grid-cols-3-lg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
