@@ -10,5 +10,6 @@ export default defineConfig({
         headers: {
             'Access-Control-Allow-Origin': '*'
         },
-    }
+    },
+    output: 'static' // ensure static build; dynamic pages must use getStaticPaths
 })

@@ -1,0 +1,384 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NavBar from '../../components/NavBar.astro';
+import { getRecipeById } from '../../lib/api';
+import type { Recipe } from '../../lib/types';
+
+/** Generate static paths to enable prerender without an adapter.
+ * Uses mock data via getRecipeById fallback by probing known IDs.
+ */
+export async function getStaticPaths() {
+  // Known mock IDs; if a real API is used at build-time, this can be expanded.
+  const ids = ['1', '2', '3'];
+  return ids.map((id) => ({ params: { id } }));
+}
+
+// Extract recipe id from route params and fetch server-side
+const { id } = Astro.params;
+const result = await getRecipeById(String(id));
+const ok = result.ok;
+const recipe: Recipe | undefined = ok ? result.data : undefined;
+const error = ok ? undefined : result.error;
+const notFound = !ok && (result as any).status === 404;
+
+// Helpers
+function formatMinutes(min?: number): string | undefined {
+  if (typeof min !== 'number' || !Number.isFinite(min)) return undefined;
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+const timeLabel = formatMinutes(recipe?.totalTimeMinutes);
+const ratingLabel = typeof recipe?.rating === 'number' ? `${recipe!.rating.toFixed(1)} / 5` : undefined;
+const ratingsCountLabel = typeof recipe?.ratingsCount === 'number' ? `(${recipe!.ratingsCount})` : undefined;
+
+const chips: Array<{label: string; title: string}> = [];
+if (recipe?.cuisine) chips.push({ label: recipe.cuisine, title: `Cuisine: ${recipe.cuisine}` });
+if (recipe?.difficulty) chips.push({ label: `Difficulty: ${String(recipe.difficulty)}`, title: `Difficulty: ${String(recipe.difficulty)}` });
+if (recipe?.tags?.length) {
+  recipe.tags.slice(0, 3).forEach(t => chips.push({ label: t, title: `Tag: ${t}` }));
+}
+---
+
+<Layout>
+  <Fragment slot="navbar">
+    <NavBar />
+  </Fragment>
+
+  {error && (
+    <section class="status surface" role="alert" aria-labelledby="error-title">
+      <div class="status__icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24"><path fill="currentColor" d="M11 15h2v2h-2zm0-8h2v6h-2z"/><path fill="currentColor" d="M1 21h22L12 2z"/></svg>
+      </div>
+      <div>
+        <h1 id="error-title" class="text-title-lg">{notFound ? 'Recipe not found' : 'Error loading recipe'}</h1>
+        <p class="text-muted">{error}</p>
+        <p><a href="/" class="btn btn-secondary">← Back to home</a></p>
+      </div>
+    </section>
+  )}
+
+  {ok && recipe && (
+    <article class="recipe" itemscope itemtype="https://schema.org/Recipe">
+      <header class="recipe__hero bg-gradient-subtle">
+        <div class="recipe__hero-inner">
+          <div class="recipe__media">
+            {recipe.imageUrl ? (
+              <img
+                src={recipe.imageUrl}
+                alt=""
+                width="1200"
+                height="800"
+                loading="eager"
+                decoding="async"
+                itemprop="image"
+              />
+            ) : (
+              <div class="recipe__media--placeholder" aria-hidden="true">
+                <svg width="64" height="64" viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5C3.89 3 3 3.9 3 5v14a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2M8.5 11.5L11 14.5l3.5-4.5L19 18H5l3.5-6.5Z"/></svg>
+              </div>
+            )}
+          </div>
+          <div class="recipe__heading">
+            <h1 class="text-title-xl" itemprop="name">{recipe.title}</h1>
+            {recipe.description && (
+              <p class="recipe__subtitle" itemprop="description">{recipe.description}</p>
+            )}
+            {chips.length > 0 && (
+              <ul class="chips" role="list">
+                {chips.map((c) => (
+                  <li class="chip" title={c.title}>{c.label}</li>
+                ))}
+              </ul>
+            )}
+            <dl class="meta" aria-label="Recipe information">
+              {timeLabel && (
+                <>
+                  <div class="meta__item">
+                    <dt class="meta__term">Time</dt>
+                    <dd class="meta__desc">
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m.5 5h-1v6l5.25 3.15l.5-.84l-4.75-2.81z"/></svg>
+                      {timeLabel}
+                    </dd>
+                  </div>
+                </>
+              )}
+              {recipe.difficulty && (
+                <div class="meta__item">
+                  <dt class="meta__term">Difficulty</dt>
+                  <dd class="meta__desc">
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h10l1 7H6zM5 22l2-11h10l2 11z"/></svg>
+                    {String(recipe.difficulty)}
+                  </dd>
+                </div>
+              )}
+              {(ratingLabel || ratingsCountLabel) && (
+                <div class="meta__item">
+                  <dt class="meta__term">Rating</dt>
+                  <dd class="meta__desc">
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m12 17.27l6.18 3.73l-1.64-7.03L21 9.24l-7.19-.61L12 2L10.19 8.63L3 9.24l4.46 4.73L5.82 21z"/></svg>
+                    <span>{ratingLabel} {ratingsCountLabel}</span>
+                  </dd>
+                </div>
+              )}
+              {recipe.servings && (
+                <div class="meta__item">
+                  <dt class="meta__term">Servings</dt>
+                  <dd class="meta__desc">
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9s9-4.03 9-9s-4.03-9-9-9m1 14h-2v-2h2zm0-4h-2V7h2z"/></svg>
+                    {String(recipe.servings)}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        </div>
+      </header>
+
+      <section class="recipe__body">
+        <div class="recipe__columns">
+          <section class="panel surface" aria-labelledby="ingredients-heading">
+            <h2 id="ingredients-heading" class="text-title-lg">Ingredients</h2>
+            {recipe.ingredients?.length ? (
+              <ul class="ingredients" itemprop="recipeIngredient" role="list">
+                {recipe.ingredients.map((ing) => (
+                  <li class="ingredients__item">
+                    <span>{ing.text}</span>
+                    {ing.notes && <small class="text-muted"> — {ing.notes}</small>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="text-muted">No ingredients listed.</p>
+            )}
+          </section>
+
+          <section class="panel surface" aria-labelledby="instructions-heading" itemprop="recipeInstructions">
+            <h2 id="instructions-heading" class="text-title-lg">Instructions</h2>
+            {recipe.instructions?.length ? (
+              <ol class="steps">
+                {recipe.instructions
+                  .slice()
+                  .sort((a, b) => (a.step ?? 0) - (b.step ?? 0))
+                  .map((s) => (
+                    <li class="steps__item">
+                      <div class="steps__badge" aria-hidden="true">{s.step}</div>
+                      <div class="steps__content">
+                        <p>{s.text}</p>
+                        {typeof s.timeMinutes === 'number' && (
+                          <p class="text-muted steps__time">
+                            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m.5 5h-1v6l5.25 3.15l.5-.84l-4.75-2.81z"/></svg>
+                            {formatMinutes(s.timeMinutes)}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+              </ol>
+            ) : (
+              <p class="text-muted">No instructions provided.</p>
+            )}
+          </section>
+        </div>
+      </section>
+
+      <footer class="recipe__footer">
+        <a href="/" class="btn btn-secondary">← Back</a>
+        {recipe.sourceUrl && (
+          <a class="btn btn-primary" href={recipe.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>
+        )}
+      </footer>
+
+      <!-- Structured data -->
+      <script type="application/ld+json" set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Recipe',
+        name: recipe.title,
+        description: recipe.description,
+        image: recipe.imageUrl,
+        totalTime: recipe.totalTimeMinutes ? `PT${recipe.totalTimeMinutes}M` : undefined,
+        recipeIngredient: recipe.ingredients?.map(i => i.text) ?? [],
+        recipeInstructions: recipe.instructions?.map(s => ({ '@type': 'HowToStep', text: s.text })) ?? [],
+        aggregateRating: typeof recipe.rating === 'number' ? {
+          '@type': 'AggregateRating',
+          ratingValue: recipe.rating,
+          ratingCount: recipe.ratingsCount ?? undefined
+        } : undefined,
+        author: recipe.author?.name ? { '@type': 'Person', name: recipe.author.name } : undefined,
+        datePublished: recipe.datePublished
+      })} />
+    </article>
+  )}
+
+  <style>
+    .status {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-4);
+      padding: var(--space-5);
+      border-left: 4px solid var(--color-error);
+      margin-top: var(--space-6);
+    }
+    .status__icon {
+      color: var(--color-error);
+      display: grid;
+      place-items: center;
+      background: rgba(239,68,68,0.10);
+      border-radius: var(--radius-md);
+      width: 56px; height: 56px;
+    }
+
+    .recipe__hero {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .recipe__hero-inner {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    .recipe__media {
+      width: 100%;
+      aspect-ratio: 3 / 2;
+      background: linear-gradient(180deg, rgba(59,130,246,0.15) 0%, rgba(37,99,235,0.05) 100%);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .recipe__media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .recipe__media--placeholder {
+      width: 100%;
+      height: 100%;
+      color: var(--color-primary);
+      display: grid;
+      place-items: center;
+    }
+    .recipe__heading {
+      padding: var(--space-6);
+      display: grid;
+      gap: var(--space-3);
+    }
+    .recipe__subtitle {
+      font-size: 1.05rem;
+    }
+
+    .chips {
+      display: flex;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .chip {
+      padding: 0.35rem 0.6rem;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      font-size: 0.8rem;
+    }
+
+    .meta {
+      display: grid;
+      gap: var(--space-2);
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: var(--space-2);
+    }
+    .meta__item {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .meta__term {
+      font-weight: 600;
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+    }
+    .meta__desc {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .recipe__body {
+      margin-top: var(--space-6);
+    }
+    .recipe__columns {
+      display: grid;
+      gap: var(--space-6);
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 900px) {
+      .recipe__hero-inner {
+        grid-template-columns: 1.2fr 1fr;
+      }
+      .recipe__columns {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .panel {
+      padding: var(--space-6);
+    }
+
+    .ingredients {
+      list-style: disc;
+      padding-left: 1.25rem;
+      margin: 0;
+      display: grid;
+      gap: 0.5rem;
+    }
+    .ingredients__item {
+      min-height: 1.25rem;
+    }
+
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: var(--space-4);
+    }
+    .steps__item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-3);
+      align-items: start;
+    }
+    .steps__badge {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-full);
+      background: rgba(37,99,235,0.12);
+      color: var(--color-primary);
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      border: 1px solid rgba(37,99,235,0.25);
+      box-shadow: var(--shadow-sm);
+    }
+    .steps__content p {
+      margin: 0 0 0.25rem 0;
+    }
+    .steps__time {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin: 0;
+      font-size: 0.9rem;
+    }
+
+    .recipe__footer {
+      display: flex;
+      gap: var(--space-3);
+      justify-content: flex-end;
+      margin-top: var(--space-6);
+    }
+  </style>
+</Layout>
