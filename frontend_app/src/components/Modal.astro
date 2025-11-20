@@ -1,0 +1,315 @@
+---
+import { getRecipeById } from "../lib/api";
+import type { Recipe } from "../lib/types";
+
+/**
+ * Modal.astro
+ * Accessible modal dialog to display recipe details when `modal=true` and `recipeId` are present in URL.
+ * Feature-flag controlled: use flags "modal" | "enableModal" | "detailModal".
+ *
+ * Props:
+ *  - enabled?: boolean (default determined by env flags)
+ *
+ * Behavior:
+ *  - SSR checks URL params; if modal is not requested, renders nothing.
+ *  - Client hydrates focus trap, Esc close, backdrop click close.
+ *  - Syncs URL by removing `modal` and `recipeId` params on close without full navigation.
+ */
+
+// PUBLIC_INTERFACE
+export interface Props {
+  /** Force enable modal independently of env flags (mostly for testing) */
+  enabled?: boolean;
+}
+
+const ENV = import.meta.env || {};
+const RAW_FLAGS = String(ENV.PUBLIC_FEATURE_FLAGS ?? "").trim();
+
+function parseFlags(raw: string): Record<string, boolean> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, !!v]));
+  } catch {
+    const set = new Set<string>(raw.split(",").map((s) => s.trim()).filter(Boolean));
+    return Object.fromEntries([...set].map((k) => [k, true]));
+  }
+  return {};
+}
+
+const FLAGS = parseFlags(RAW_FLAGS);
+const flagEnabled = !!(FLAGS.modal || FLAGS.enableModal || FLAGS.detailModal);
+
+const { enabled = flagEnabled } = Astro.props as Props;
+
+const usp = new URLSearchParams(Astro.url.search);
+const isModal = (usp.get("modal") || "").toLowerCase() === "true";
+const recipeId = usp.get("recipeId") || usp.get("id") || undefined;
+
+let ok = false;
+let recipe: Recipe | undefined;
+let error: string | undefined;
+
+if (enabled && isModal && recipeId) {
+  const result = await getRecipeById(String(recipeId));
+  ok = result.ok;
+  recipe = result.ok ? result.data : undefined;
+  error = result.ok ? undefined : result.error;
+}
+
+// Helper: format minutes
+function formatMinutes(min?: number): string | undefined {
+  if (typeof min !== "number" || !Number.isFinite(min)) return undefined;
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+const timeLabel = formatMinutes(recipe?.totalTimeMinutes);
+const ratingLabel = typeof recipe?.rating === 'number' ? `${recipe!.rating.toFixed(1)} / 5` : undefined;
+const ratingsCountLabel = typeof recipe?.ratingsCount === 'number' ? `(${recipe!.ratingsCount})` : undefined;
+---
+
+{enabled && isModal && (
+  <div
+    id="modal-root"
+    class="modal-root"
+    aria-hidden={ok || error ? "false" : "true"}
+  >
+    <div class="modal-backdrop" data-close="true"></div>
+    <div
+      class="modal-dialog surface"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      aria-describedby="modal-desc"
+      tabindex="-1"
+    >
+      <header class="modal-header">
+        <h2 id="modal-title" class="text-title-md">
+          {ok && recipe ? recipe.title : "Recipe"}
+        </h2>
+        <button class="btn btn-secondary modal-close" aria-label="Close" data-close="true">
+          ✕
+        </button>
+      </header>
+
+      <section id="modal-desc" class="modal-body">
+        {error && (
+          <div role="alert" class="banner banner--error">
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+
+        {ok && recipe && (
+          <article class="recipe-modal" itemscope itemtype="https://schema.org/Recipe">
+            <figure class="recipe-modal__media">
+              {recipe.imageUrl ? (
+                <img src={recipe.imageUrl} alt="" width="900" height="600" loading="eager" decoding="async" />
+              ) : (
+                <div class="recipe-modal__placeholder" aria-hidden="true">
+                  <svg width="40" height="40" viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5C3.89 3 3 3.9 3 5v14a2 2 0 0 0 2 2h14c1.11 0 2-.9 2-2M8.5 11.5L11 14.5l3.5-4.5L19 18H5l3.5-6.5Z"/></svg>
+                </div>
+              )}
+            </figure>
+            <div class="recipe-modal__content">
+              {recipe.description && <p class="text-muted">{recipe.description}</p>}
+              <div class="recipe-modal__meta">
+                {timeLabel && (
+                  <span class="meta-item" title="Total time">
+                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2m.5 5h-1v6l5.25 3.15l.5-.84l-4.75-2.81z"/></svg>
+                    {timeLabel}
+                  </span>
+                )}
+                {(ratingLabel || ratingsCountLabel) && (
+                  <span class="meta-item" title="Rating">
+                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m12 17.27l6.18 3.73l-1.64-7.03L21 9.24l-7.19-.61L12 2L10.19 8.63L3 9.24l4.46 4.73L5.82 21z"/></svg>
+                    <span>{ratingLabel} {ratingsCountLabel}</span>
+                  </span>
+                )}
+                {recipe.servings && (
+                  <span class="meta-item" title="Servings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9s9-4.03 9-9s-4.03-9-9-9m1 14h-2v-2h2zm0-4h-2V7h2z"/></svg>
+                    {String(recipe.servings)}
+                  </span>
+                )}
+              </div>
+
+              <details class="recipe-modal__section" open>
+                <summary class="text-title-md">Ingredients</summary>
+                {recipe.ingredients?.length ? (
+                  <ul class="ingredients" role="list">
+                    {recipe.ingredients.map((ing) => (
+                      <li>{ing.text}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p class="text-muted">No ingredients listed.</p>
+                )}
+              </details>
+
+              <details class="recipe-modal__section" open>
+                <summary class="text-title-md">Steps</summary>
+                {recipe.instructions?.length ? (
+                  <ol class="steps" role="list">
+                    {recipe.instructions
+                      .slice()
+                      .sort((a, b) => (a.step ?? 0) - (b.step ?? 0))
+                      .map((s) => (
+                        <li>
+                          <strong>Step {s.step}.</strong> {s.text}
+                        </li>
+                      ))}
+                  </ol>
+                ) : (
+                  <p class="text-muted">No instructions provided.</p>
+                )}
+              </details>
+            </div>
+          </article>
+        )}
+      </section>
+
+      <footer class="modal-footer">
+        <a href={recipe ? `/recipes/${encodeURIComponent(String(recipe.id))}` : "#"} class="btn btn-primary">Open full page</a>
+        <button class="btn btn-secondary" data-close="true">Close</button>
+      </footer>
+    </div>
+  </div>
+)}
+
+<style>
+  .modal-root {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 1000;
+  }
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(2px);
+  }
+  .modal-dialog {
+    position: relative;
+    width: min(920px, 96vw);
+    max-height: 90vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    animation: modal-in var(--transition);
+  }
+  @keyframes modal-in {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .modal-header, .modal-footer {
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .modal-footer { border-top: 1px solid var(--color-border); border-bottom: 0; display: flex; gap: var(--space-3); justify-content: flex-end; }
+  .modal-body { padding: var(--space-4); overflow: auto; }
+  .modal-close { margin-left: auto; }
+
+  .recipe-modal__media {
+    width: 100%;
+    aspect-ratio: 3/2;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin: 0 0 var(--space-4) 0;
+    background: linear-gradient(180deg, rgba(59,130,246,0.15) 0%, rgba(37,99,235,0.05) 100%);
+  }
+  .recipe-modal__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .recipe-modal__placeholder { width: 100%; height: 100%; color: var(--color-primary); display: grid; place-items: center; }
+
+  .recipe-modal__content { display: grid; gap: var(--space-4); }
+  .recipe-modal__meta { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--color-text-muted); }
+  .meta-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+  .ingredients { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
+  .steps { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
+
+  .recipe-modal__section summary { cursor: pointer; }
+</style>
+
+<script>
+  // Client: setup close behaviors, focus trap, Esc handling, and URL cleanup.
+  (function () {
+    const root = document.getElementById('modal-root');
+    if (!root) return;
+    const dialog = root.querySelector('.modal-dialog');
+    if (!(dialog instanceof HTMLElement)) return;
+
+    // Focus trap helpers
+    function getFocusable(container) {
+      return Array.from(container.querySelectorAll(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+      )).filter(el => (el).offsetParent !== null);
+    }
+
+    function trapFocus(e) {
+      if (e.key !== 'Tab') return;
+      const focusables = getFocusable(dialog);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || active === dialog) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    // On mount, focus dialog or first focusable
+    setTimeout(() => {
+      const focusables = getFocusable(dialog);
+      (focusables[0] || dialog).focus();
+      document.body.style.overflow = 'hidden';
+    }, 0);
+
+    function closeModal() {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('modal');
+        url.searchParams.delete('recipeId');
+        url.searchParams.delete('id');
+        window.history.replaceState({}, '', url);
+      } catch {}
+      document.body.style.overflow = '';
+      root.remove();
+    }
+
+    root.addEventListener('click', (e) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && t.dataset.close === 'true') {
+        e.preventDefault();
+        closeModal();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeModal();
+      } else if (e.key === 'Tab') {
+        trapFocus(e);
+      }
+    }, { capture: true });
+
+    // Prevent background scroll on iOS/others
+    root.addEventListener('wheel', (e) => {
+      if (!dialog.contains(e.target)) e.preventDefault();
+    }, { passive: false });
+  })();
+</script>

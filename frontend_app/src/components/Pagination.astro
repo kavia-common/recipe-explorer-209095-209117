@@ -1,0 +1,152 @@
+---
+/**
+ * Pagination.astro
+ * Optional client-enhanced pagination controls.
+ * Feature-flag keys: "pagination" | "enablePagination".
+ *
+ * Props:
+ *  - total: number
+ *  - page: number
+ *  - pageSize: number
+ *  - hasMore?: boolean
+ *  - enabled?: boolean (default from flags)
+ */
+
+// PUBLIC_INTERFACE
+export interface Props {
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore?: boolean;
+  enabled?: boolean;
+}
+
+const ENV = import.meta.env || {};
+const RAW_FLAGS = String(ENV.PUBLIC_FEATURE_FLAGS ?? "").trim();
+
+function parseFlags(raw: string): Record<string, boolean> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, !!v]));
+  } catch {
+    const set = new Set<string>(raw.split(",").map((s) => s.trim()).filter(Boolean));
+    return Object.fromEntries([...set].map((k) => [k, true]));
+  }
+  return {};
+}
+const FLAGS = parseFlags(RAW_FLAGS);
+const flagEnabled = !!(FLAGS.pagination || FLAGS.enablePagination);
+
+const { total, page, pageSize, hasMore = page * pageSize < total, enabled = flagEnabled } = Astro.props as Props;
+
+function makeUrl(nextPage: number): string {
+  const url = new URL(Astro.url);
+  if (nextPage <= 1) url.searchParams.delete("page");
+  else url.searchParams.set("page", String(nextPage));
+  return url.pathname + (url.search ? `?${url.searchParams.toString()}` : "");
+}
+
+const totalPages = Math.max(1, Math.ceil((total || 0) / (pageSize || 1)));
+---
+<nav class="pagination" aria-label="Pagination">
+  <a
+    class:list={['btn','btn-secondary','pagination__btn', page <= 1 ? 'is-disabled' : '']}
+    href={makeUrl(Math.max(1, page - 1))}
+    aria-disabled={page <= 1 ? 'true' : 'false'}
+    id="prev-page"
+  >
+    ← Prev
+  </a>
+  <span class="pagination__info">Page {page} {total ? `of ${totalPages}` : ''}</span>
+  <a
+    class:list={['btn','btn-secondary','pagination__btn', !hasMore ? 'is-disabled' : '']}
+    href={makeUrl(page + 1)}
+    aria-disabled={!hasMore ? 'true' : 'false'}
+    id="next-page"
+  >
+    Next →
+  </a>
+</nav>
+
+<style>
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    margin-top: var(--space-6);
+  }
+  .pagination__btn.is-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .pagination__info {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+  }
+</style>
+
+{enabled && (
+<script>
+  // Enhance pagination with in-place refresh.
+  (function () {
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+
+    function setParam(key, value) {
+      const url = new URL(window.location.href);
+      const usp = url.searchParams;
+      if (value === undefined || value === null || String(value).trim() === '') {
+        usp.delete(key);
+      } else {
+        usp.set(key, String(value).trim());
+      }
+      url.search = usp.toString();
+      window.history.replaceState({}, '', url);
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch(window.location.href, { headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' });
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newResults = doc.getElementById('results');
+        const currentResults = document.getElementById('results');
+        const newPagination = doc.querySelector('.pagination');
+        const currentPagination = document.querySelector('.pagination');
+        if (newResults && currentResults) currentResults.replaceWith(newResults);
+        if (newPagination && currentPagination) currentPagination.replaceWith(newPagination);
+        // Re-run script in newly replaced pagination if needed (Astro will include it again)
+      } catch (e) {
+        console.warn('[Pagination] refresh failed', e);
+      }
+    }
+
+    function onPrev(ev) {
+      const target = ev.currentTarget;
+      if (!(target instanceof HTMLAnchorElement)) return;
+      ev.preventDefault();
+      const url = new URL(window.location.href);
+      const current = Number(url.searchParams.get('page') || '1');
+      const next = Math.max(1, current - 1);
+      setParam('page', next);
+      refresh();
+    }
+
+    function onNext(ev) {
+      const target = ev.currentTarget;
+      if (!(target instanceof HTMLAnchorElement)) return;
+      ev.preventDefault();
+      const url = new URL(window.location.href);
+      const current = Number(url.searchParams.get('page') || '1');
+      const next = current + 1;
+      setParam('page', next);
+      refresh();
+    }
+
+    prevBtn?.addEventListener('click', onPrev);
+    nextBtn?.addEventListener('click', onNext);
+  })();
+</script>
+)}

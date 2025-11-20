@@ -3,6 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import NavBar from '../components/NavBar.astro';
 import Filters from '../components/Filters.astro';
 import RecipeGrid from '../components/RecipeGrid.astro';
+import Modal from '../components/Modal.astro';
+import Pagination from '../components/Pagination.astro';
 import { getRecipes } from '../lib/api';
 import type { RecipeQueryParams } from '../lib/types';
 
@@ -78,6 +80,24 @@ const page = data?.page ?? params.page ?? 1;
 const pageSize = data?.pageSize ?? params.pageSize ?? 12;
 const hasMore = data?.hasMore ?? (page * pageSize < total);
 
+// Feature flag parsing
+const ENV = import.meta.env || {};
+const RAW_FLAGS = String(ENV.PUBLIC_FEATURE_FLAGS ?? "").trim();
+function parseFlags(raw: string): Record<string, boolean> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, !!v]));
+  } catch {
+    const set = new Set<string>(raw.split(",").map((s) => s.trim()).filter(Boolean));
+    return Object.fromEntries([...set].map((k) => [k, true]));
+  }
+  return {};
+}
+const FLAGS = parseFlags(RAW_FLAGS);
+const ENABLE_MODAL = !!(FLAGS.modal || FLAGS.enableModal || FLAGS.detailModal);
+const ENABLE_PAGINATION = !!(FLAGS.pagination || FLAGS.enablePagination);
+
 // Helpers for pagination links (server-side navigation as fallback)
 function makeUrl(nextPage: number): string {
   const url = new URL(Astro.url);
@@ -147,25 +167,29 @@ function currentSort(): string {
         <RecipeGrid recipes={recipes} emptyMessage="No recipes match your search. Try adjusting filters." />
       </div>
 
-      <nav class="pagination" aria-label="Pagination">
-        <a
-          class:list={['btn','btn-secondary','pagination__btn', page <= 1 ? 'is-disabled' : '']}
-          href={makeUrl(Math.max(1, page - 1))}
-          aria-disabled={page <= 1 ? 'true' : 'false'}
-          id="prev-page"
-        >
-          ← Prev
-        </a>
-        <span class="pagination__info">Page {page} {total ? `of ${Math.max(1, Math.ceil(total / pageSize))}` : ''}</span>
-        <a
-          class:list={['btn','btn-secondary','pagination__btn', !hasMore ? 'is-disabled' : '']}
-          href={makeUrl(page + 1)}
-          aria-disabled={!hasMore ? 'true' : 'false'}
-          id="next-page"
-        >
-          Next →
-        </a>
-      </nav>
+      {ENABLE_PAGINATION ? (
+        <Pagination total={total} page={page} pageSize={pageSize} hasMore={hasMore} enabled={true} />
+      ) : (
+        <nav class="pagination" aria-label="Pagination">
+          <a
+            class:list={['btn','btn-secondary','pagination__btn', page <= 1 ? 'is-disabled' : '']}
+            href={makeUrl(Math.max(1, page - 1))}
+            aria-disabled={page <= 1 ? 'true' : 'false'}
+            id="prev-page"
+          >
+            ← Prev
+          </a>
+          <span class="pagination__info">Page {page} {total ? `of ${Math.max(1, Math.ceil(total / pageSize))}` : ''}</span>
+          <a
+            class:list={['btn','btn-secondary','pagination__btn', !hasMore ? 'is-disabled' : '']}
+            href={makeUrl(page + 1)}
+            aria-disabled={!hasMore ? 'true' : 'false'}
+            id="next-page"
+          >
+            Next →
+          </a>
+        </nav>
+      )}
     </div>
   </section>
 
@@ -240,6 +264,8 @@ function currentSort(): string {
       font-size: 0.95rem;
     }
   </style>
+
+  {ENABLE_MODAL && (<Modal enabled={true} />)}
 
   <script>
     // Client-script: listen for search/filter changes, update URL, re-fetch partial HTML for results and pagination.
@@ -358,7 +384,64 @@ function currentSort(): string {
         refresh();
       });
 
+      // If modal feature is enabled, intercept recipe links to open as modal.
+      const ENABLE_MODAL = (function() {
+        try {
+          const raw = String((import.meta && (import.meta as any).env && (import.meta as any).env.PUBLIC_FEATURE_FLAGS) ?? '').trim();
+          if (!raw) return false;
+          try {
+            const obj = JSON.parse(raw);
+            return !!(obj.modal || obj.enableModal || obj.detailModal);
+          } catch {
+            const set = new Set(raw.split(',').map(s => s.trim()).filter(Boolean));
+            return set.has('modal') || set.has('enableModal') || set.has('detailModal');
+          }
+        } catch { return false; }
+      })();
+
+      function enableModalLinkHandling() {
+        if (!ENABLE_MODAL) return;
+        document.addEventListener('click', (e) => {
+          const a = (e.target as HTMLElement)?.closest?.('a[href^="/recipes/"]');
+          if (!(a instanceof HTMLAnchorElement)) return;
+          // Only intercept normal left-click without modifiers
+          if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          // Derive recipe id from href /recipes/:id
+          try {
+            const url = new URL(a.href, window.location.origin);
+            const m = url.pathname.match(/\/recipes\/([^/]+)/);
+            const id = m?.[1];
+            if (!id) return;
+            e.preventDefault();
+            const current = new URL(window.location.href);
+            current.searchParams.set('modal', 'true');
+            current.searchParams.set('recipeId', id);
+            window.history.replaceState({}, '', current);
+            // fetch the page again to mount modal server-rendered content
+            // We can soft navigate by reloading same page to get SSR modal HTML.
+            // Prefer lightweight fetch and DOM swap for #modal-root only.
+            fetch(window.location.href, { headers: { 'X-Requested-With': 'fetch' }, cache: 'no-store' })
+              .then(r => r.text())
+              .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const modal = doc.getElementById('modal-root');
+                if (modal) {
+                  const existing = document.getElementById('modal-root');
+                  if (existing) existing.remove();
+                  document.body.appendChild(modal);
+                  // Re-run minimal client init if needed: Modal component script will run on insertion due to inline handlers.
+                } else {
+                  // fallback hard reload
+                  window.location.reload();
+                }
+              })
+              .catch(() => window.location.reload());
+          } catch {}
+        }, { capture: true });
+      }
+
       bindControls();
+      enableModalLinkHandling();
     })();
   </script>
 </Layout>
